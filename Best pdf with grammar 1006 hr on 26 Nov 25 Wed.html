@@ -1,0 +1,1721 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=yes" />
+<title>PQuiz — Orange Refined (Fixed Exam & Quick Links)</title>
+
+<!-- pdf.js -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+<script>
+  pdfjsLib.GlobalWorkerOptions.workerSrc =
+    "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js";
+</script>
+
+<!-- JSZip -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
+<style>
+:root{
+  --bg:#0e141a; --panel:#0f1a23; --ink:#e6f1fb; --muted:#9fb3c7;
+  --accent:#ff8a00; --accent2:#ffb86b; --good:#27d07a; --bad:#ff5c6c;
+  --chip:#15232e; --radius:14px;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);
+font:16px/1.45 system-ui,-apple-system,Segoe UI,Roboto}
+body{display:flex;flex-direction:column;overflow:auto;padding-bottom:40px}
+
+/* Progress banner */
+#progressBanner{position:fixed;left:0;right:0;top:0;z-index:1400;
+display:none;align-items:center;justify-content:center;
+background:linear-gradient(90deg,var(--accent),var(--accent2));
+color:#001;padding:10px 18px;box-shadow:0 6px 30px rgba(255,138,0,0.12)}
+#progressBarOuter{width:72%;background:rgba(0,0,0,0.1);height:12px;
+border-radius:999px;overflow:hidden;margin-left:12px}
+#progressBarInner{height:100%;width:0%;background:linear-gradient(90deg,#ff9a2a,#ffd19a);transition:width .12s}
+
+/* toolbar */
+.toolbar{padding:12px}
+.controls{display:flex;flex-wrap:wrap;gap:10px;align-items:center;
+background:var(--panel);padding:10px;border-radius:14px}
+.btn{background:#173242;padding:10px 14px;border-radius:12px;cursor:pointer;color:var(--ink);border:0}
+.chip{background:var(--chip);padding:8px 12px;border-radius:12px;color:var(--muted)}
+input.url, input.pg{background:#0e1a22;color:var(--ink);border:1px solid #274358;
+border-radius:12px;padding:8px 12px}
+input.url{flex:1;min-width:160px}
+
+/* panels */
+.stack{display:flex;flex-direction:column;gap:12px;padding:12px}
+.panel{background:var(--panel);border-radius:14px;box-shadow:0 6px 20px #0008;
+display:flex;flex-direction:column;min-height:100px;overflow:hidden}
+.panel h3{margin:0;padding:12px 16px 0}
+.panel .sub{color:var(--muted);font-size:13px;padding:0 16px 8px}
+.paneBody{flex:1;min-height:120px;position:relative;overflow:auto;padding:10px}
+
+/* divider */
+.divider{height:18px;border-radius:999px;margin:6px 16px;cursor:row-resize;
+touch-action:none;background:linear-gradient(90deg,var(--accent),var(--accent2));
+box-shadow:0 0 18px 3px rgba(255,138,0,0.16);position:relative;z-index:100;
+user-select:none;-webkit-user-select:none;transform:translateZ(0)}
+
+#pdfScroll{overflow:auto;max-height:65vh;position:relative}
+.pageWrap{position:relative;margin:10px auto;display:flex;justify-content:center}
+.pageCanvas{display:block;border-radius:12px;background:#0b1218;box-shadow:0 3px 12px #000a;max-width:92vw}
+.badge{position:absolute;right:8px;top:8px;font-size:12px;background:#0007;
+padding:5px 8px;border-radius:10px;color:#fff}
+
+/* sliding bar */
+.touchBar{position:absolute;right:8px;top:10px;bottom:10px;width:10px;
+background:rgba(0,0,0,0.12);border-radius:999px}
+.thumb{position:absolute;left:1px;width:8px;border-radius:999px;
+background:linear-gradient(#ffb46a,#ff8a00)}
+
+/* lists */
+.list{display:flex;flex-direction:column;gap:12px}
+.item{background:#14212c;border:1px solid #203242;border-radius:12px;
+padding:12px 14px;line-height:1.6}
+.item small{color:var(--muted);margin-right:8px;font-size:12px}
+.item .rm{float:right;background:#2a1b23;color:#ffd1d1;
+border:1px solid #4b2a34;border-radius:999px;padding:4px 8px;margin-left:12px}
+
+/* words */
+.word{padding:2px 6px;border-radius:10px;margin:0 2px;display:inline-block;cursor:pointer}
+.word.mark{background:#2c4560;outline:1px solid #5aa6ff}
+.sep{white-space:pre}
+
+/* blanks */
+.blank{display:inline-block;min-width:2.6ch;border-bottom:2px solid #ffc98b;
+padding:0 6px;border-radius:4px;margin:0 4px;transition:background .15s,box-shadow .15s}
+.blank .ans{display:none}
+.blank.reveal .ans{display:inline}
+.blank.reveal .dots{display:none}
+.blank.ok{background:var(--good);color:#001;box-shadow:0 0 10px #1ff1a0}
+.blank.badflash{background:var(--bad);color:#200;box-shadow:0 0 8px #fda}
+
+/* options */
+.letters,.wordChoices{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.letterBtn,.wordBtn{background:#122634;border:1px solid #224355;color:#ffdfe8;
+border-radius:10px;padding:8px 12px;min-width:40px;text-align:center;font-weight:700}
+/* drawer */
+.drawerBack{position:fixed;inset:0;background:transparent;
+display:none;z-index:999}
+.drawer{position:fixed;right:12px;top:70px;background:var(--panel);
+padding:10px;border-radius:12px;box-shadow:0 14px 40px #000a;
+display:flex;flex-direction:column;gap:8px;z-index:1000;max-height:70vh;overflow:auto}
+.iconBtn{width:56px;height:48px;border-radius:10px;background:#113041;
+display:inline-flex;align-items:center;justify-content:center;color:var(--ink);border:0}
+
+/* toast */
+.toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);
+background:#173242;color:#bfe8ff;padding:8px 12px;border-radius:12px;
+box-shadow:0 6px 18px #000a;z-index:9999}
+
+/* highlight */
+.item.highlighted{background:#2a2400;border:1px solid #ffd700;
+box-shadow:0 0 0 1px rgba(255,215,0,0.4)}
+.item.highlighted small{color:#ffd700}
+
+/* clickable page */
+.clickable-page{color:#ffd700;cursor:pointer;text-decoration:underline;
+text-decoration-color:rgba(255,215,0,0.5);padding:2px 4px;border-radius:4px}
+.clickable-page:hover{background:rgba(255,215,0,0.2);text-decoration-color:#ffd700}
+
+/* text paste */
+.text-paste-area{background:#0e1a22;border:1px solid #274358;
+border-radius:8px;padding:10px;color:var(--ink);font-size:14px;
+resize:vertical;min-height:80px;width:100%;font-family:inherit}
+.text-paste-actions{display:flex;gap:8px;justify-content:flex-end}
+
+/* sync flash */
+.syncFlash{
+  outline: 2px solid #ffd700 !important;
+  background: rgba(255,215,0,0.08) !important;
+  transition: outline 0.35s ease, background 0.35s ease;
+}
+
+/* sentence hyperlink */
+.sentence-hyperlink {
+  cursor: pointer;
+  color: #ffd700;
+  text-decoration: underline;
+  text-decoration-color: rgba(255,215,0,0.5);
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+.sentence-hyperlink:hover {
+  background: rgba(255,215,0,0.2);
+  text-decoration-color: #ffd700;
+}
+
+/* remove highlight button */
+.remove-highlight {
+  background: transparent;
+  border: 1px solid #ff6b6b;
+  color: #ff6b6b;
+  border-radius: 8px;
+  padding: 4px 8px;
+  margin-left: 6px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.remove-highlight:hover {
+  background: #ff6b6b;
+  color: #fff;
+}
+
+/* Quick link delete button */
+.quicklink-delete {
+  background: transparent;
+  border: 1px solid #ff6b6b;
+  color: #ff6b6b;
+  border-radius: 6px;
+  padding: 2px 6px;
+  margin-left: 6px;
+  font-size: 10px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.quicklink-delete:hover {
+  background: #ff6b6b;
+  color: #fff;
+}
+
+/* Exam panel text wrapping */
+.exam-sentence {
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  white-space: normal;
+  line-height: 1.5;
+}
+</style>
+</head>
+<body>
+
+<!-- Progress Banner -->
+<div id="progressBanner" role="status" aria-live="polite">
+  <div id="progressText">Working…</div>
+  <div id="progressBarOuter"><div id="progressBarInner"></div></div>
+  <button id="progressCancel" class="btn"
+    style="margin-left:12px;background:rgba(0,0,0,0.15);color:#fff">
+    Cancel
+  </button>
+</div>
+
+<!-- Toolbar -->
+<div class="toolbar">
+  <div class="controls">
+    <label class="btn" for="pdfFile">📄 Upload (Local)</label>
+    <input id="pdfFile" type="file" accept="application/pdf" />
+
+    <input id="urlInput" class="url" placeholder="Paste PDF URL (optional)" />
+    <button id="loadUrl" class="btn">Load URL</button>
+
+    <div class="chip" id="fileName">No PDF</div>
+    <div class="chip" id="pageChip">—/—</div>
+    <div class="chip" id="zoomChip">100%</div>
+
+    <button id="zOut" class="btn">−</button>
+    <button id="zIn" class="btn">＋</button>
+    <button id="zReset" class="btn">Reset</button>
+
+    <span class="chip">Page</span>
+    <input id="pgInput" class="pg" style="width:72px" placeholder="1" />
+    <button id="pgGo" class="btn">Go</button>
+
+    <select id="quizMode" title="Quiz mode">
+      <option value="first">First letters</option>
+      <option value="words">Whole words</option>
+    </select>
+
+    <button id="openDrawer" class="btn">Options ⚙️</button>
+
+    <button id="exportSel" class="btn">⬇️ Export Selected</button>
+    <button id="exportExam" class="btn">⬇️ Export Exam</button>
+
+    <label class="btn" for="importSel">🧺 Import Selected</label>
+    <input id="importSel" type="file" accept="application/json" />
+
+    <label class="btn" for="importExam">🧺 Import Exam</label>
+    <input id="importExam" type="file" accept="application/json" />
+
+    <button id="exportPquiz" class="btn">📦 Export PQUIZ</button>
+
+    <label class="btn" for="importPquiz">📥 Import PQUIZ</label>
+    <input id="importPquiz" type="file" accept=".pquiz,.zip,.pquiz.zip" />
+  </div>
+</div>
+
+<!-- Drawer -->
+<div class="drawerBack" id="drawerBack"></div>
+<div class="drawer" id="drawer" style="display:none">
+  <button id="saveBtn" class="iconBtn" title="Export selected">💾</button>
+  <button id="modeLetters" class="iconBtn" title="First-letter mode">A..</button>
+  <button id="modeWords" class="iconBtn" title="Whole-word mode">WORD</button>
+  <button id="resetAll" class="iconBtn" title="Reset all exam reveal states">↺</button>
+  <div style="margin-top:6px;color:var(--muted);font-size:13px">Tap outside to close</div>
+</div>
+
+<!-- Panels container -->
+<div class="stack" id="stack">
+
+  <!-- PDF Viewer -->
+  <section class="panel" id="pdfPanel" style="height:40vh;min-height:140px;">
+    <h3>PDF Viewer <span class="sub">scroll • pinch-zoom • text selectable</span></h3>
+    <div class="paneBody" id="pdfScroll">
+      <div id="pdfSpace"></div>
+      <div class="touchBar" id="touchBar"><div class="thumb" id="thumb"></div></div>
+    </div>
+  </section>
+
+  <div class="divider" data-prev="pdfPanel" data-next="textPanel"></div>
+
+  <!-- Text Input -->
+  <section class="panel" id="textPanel" style="height:20vh;min-height:100px">
+    <h3>Text Input <span class="sub">paste or type text to use without PDF</span></h3>
+    <div class="paneBody">
+      <textarea id="textPasteArea" class="text-paste-area" placeholder="Paste or type text here..."></textarea>
+      <div class="text-paste-actions">
+        <button id="clearText" class="btn mini">Clear</button>
+        <button id="loadText" class="btn">Load Text</button>
+      </div>
+    </div>
+  </section>
+
+  <div class="divider" data-prev="textPanel" data-next="hyperPanel"></div>
+
+  <!-- Quick Links -->
+  <section class="panel" id="hyperPanel" style="height:20vh;min-height:100px">
+    <h3>Quick Links <span class="sub">save page numbers for quick navigation</span></h3>
+    <div class="paneBody">
+      <div class="hyperlink-form" style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+        <input type="number" id="hyperlinkPage" class="hyperlink-input page" placeholder="Page" min="1" style="width:84px" />
+        <input type="text" id="hyperlinkName" class="hyperlink-input name" placeholder="Description (optional)" maxlength="30" />
+        <button id="addHyperlink" class="btn">Add Link</button>
+        <button id="clearLinks" class="btn">Clear All</button>
+      </div>
+      <div class="hyperlinks-container" id="hyperlinksContainer"></div>
+    </div>
+  </section>
+
+  <div class="divider" data-prev="hyperPanel" data-next="exPanel"></div>
+
+  <!-- Extracted Sentences -->
+  <section class="panel" id="exPanel" style="height:28vh;min-height:120px">
+    <h3>Extracted Sentences <span class="sub">(visible PDF page)</span></h3>
+    <div class="paneBody" id="exBody">
+      <div class="list" id="exList"></div>
+    </div>
+  </section>
+
+  <div class="divider" data-prev="exPanel" data-next="selPanel"></div>
+
+  <!-- Selected Sentences -->
+  <section class="panel" id="selPanel" style="height:28vh;min-height:120px">
+    <h3>Selected Sentences <span class="sub">tap words to mark • ❌ removes</span></h3>
+    <div class="paneBody" id="selBody">
+      <div class="list" id="selList"></div>
+    </div>
+  </section>
+
+  <div class="divider" data-prev="selPanel" data-next="examPanel"></div>
+
+  <!-- Exam Panel -->
+  <section class="panel" id="examPanel" style="height:30vh;min-height:120px">
+    <h3>Exam Panel <span class="sub">tappable blanks • quiz modes</span></h3>
+    <div class="paneBody" id="examBody">
+      <div class="list" id="exam"></div>
+    </div>
+  </section>
+
+</div>
+
+<script>
+/* ------------------------------
+   PART A — HELPERS, STATE, PROGRESS, DIVIDERS
+------------------------------ */
+const $ = s => document.querySelector(s);
+const $$ = s => Array.from(document.querySelectorAll(s));
+const clamp = (v,a,b) => Math.max(a, Math.min(b, v));
+
+function toast(msg){
+  const n = document.createElement('div');
+  n.className = 'toast';
+  n.textContent = msg;
+  document.body.appendChild(n);
+  setTimeout(()=> n.remove(), 1600);
+}
+
+function escapeHtml(s){
+  return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+/* Token splitter used for building selectable words */
+function splitTokens(s){
+  const out=[]; const re = /([A-Za-z][A-Za-z0-9'’-]*|\d+(?:[.,]\d+)*|[^\sA-Za-z0-9]|\s+)/g;
+  let m;
+  while((m=re.exec(s))) out.push(m[1]);
+  return out;
+}
+
+const S = {
+  pdf: null,
+  num: 0,
+  cur: 1,
+  zoom: 1,
+  minZ: .5,
+  maxZ: 3,
+  wraps: new Map(),
+  rendered: new Set(),
+  fileName: 'No PDF',
+  fileBlob: null,
+  hyperlinks: JSON.parse(localStorage.getItem('pquiz_hyperlinks') || '[]'),
+  textMode: false,
+  suppressExtractOnPdfScroll: false,
+  _suppTimer: null,
+  _suspendScroll: false
+};
+
+/* Progress banner */
+const banner = $('#progressBanner');
+const pText = $('#progressText');
+const pInner = $('#progressBarInner');
+const pCancel = $('#progressCancel');
+
+function showProgress(percent, text){
+  pText.textContent = text || (`Working… ${Math.round(percent)}%`);
+  pInner.style.width = clamp(percent,0,100) + '%';
+  banner.style.display = 'flex';
+}
+function hideProgress(){ banner.style.display = 'none'; pInner.style.width = '0%'; pText.textContent=''; }
+
+/* Divider dragging */
+(function(){
+  const minPanelH = 80;
+  $$('.divider').forEach(div=>{
+    let startY = 0, prevEl=null, nextEl=null, prevStart=0, nextStart=0;
+    div.addEventListener('pointerdown', e=>{
+      e.preventDefault();
+      startY = e.clientY;
+      prevEl = document.getElementById(div.dataset.prev);
+      nextEl = document.getElementById(div.dataset.next);
+      if(!prevEl||!nextEl) return;
+      prevStart = prevEl.getBoundingClientRect().height;
+      nextStart = nextEl.getBoundingClientRect().height;
+      document.body.style.userSelect='none';
+      div.setPointerCapture(e.pointerId);
+      const move = ev=>{
+        ev.preventDefault();
+        const dy = ev.clientY - startY;
+        const total = prevStart + nextStart;
+        let newPrev = clamp(prevStart + dy, minPanelH, total - minPanelH);
+        let newNext = total - newPrev;
+        prevEl.style.height = newPrev + 'px';
+        nextEl.style.height = newNext + 'px';
+        const rect = div.getBoundingClientRect();
+        const vp = window.innerHeight;
+        if(rect.top < 90) window.scrollBy(0, -10);
+        else if(vp - rect.bottom < 90) window.scrollBy(0, 10);
+      };
+      const up = ()=>{
+        window.removeEventListener('pointermove', move);
+        window.removeEventListener('pointerup', up);
+        document.body.style.userSelect='';
+      };
+      window.addEventListener('pointermove', move, {passive:false});
+      window.addEventListener('pointerup', up, {passive:true});
+    });
+    div.addEventListener('selectstart', e=> e.preventDefault());
+  });
+})();
+
+</script>
+
+<script>
+/* ------------------------------
+   PART B — PDF RENDER + EXTRACTION
+------------------------------ */
+
+let renderQueue = [];
+let rendering = false;
+
+function queueRender(n){
+  if(!S.pdf) return;
+  if(n < 1 || n > S.num) return;
+  if(S.rendered.has(n)) return;
+  if(renderQueue.includes(n)) return;
+  renderQueue.push(n);
+  pump();
+}
+
+async function pump(){
+  if(rendering || !renderQueue.length) return;
+  rendering = true;
+  const n = renderQueue.shift();
+  try{
+    const page = await S.pdf.getPage(n);
+    const vp = page.getViewport({ scale: S.zoom });
+    const wrap = S.wraps.get(n);
+    if(!wrap) return;
+    wrap.innerHTML = "";
+    const c = document.createElement('canvas');
+    c.className = 'pageCanvas';
+    const maxW = Math.round(window.innerWidth * 1.5);
+    const ratio = Math.min(1.0, maxW / vp.width);
+    c.width  = Math.round(vp.width  * ratio);
+    c.height = Math.round(vp.height * ratio);
+    c.style.width = Math.round(Math.min(vp.width * ratio, window.innerWidth * 0.92)) + "px";
+    const ctx = c.getContext('2d', {alpha:false});
+    ctx.clearRect(0,0,c.width,c.height);
+    await page.render({
+      canvasContext: ctx,
+      viewport: page.getViewport({ scale: S.zoom * ratio })
+    }).promise;
+    const badge = document.createElement('div'); badge.className='badge'; badge.textContent = "p" + n;
+    const holder = document.createElement('div'); holder.className = 'pageWrap'; holder.dataset.page = n;
+    holder.appendChild(c);
+    wrap.appendChild(holder);
+    wrap.appendChild(badge);
+    S.rendered.add(n);
+  }catch(err){ console.error("Render failed p"+n, err); }
+  finally{ rendering = false; if(renderQueue.length) pump(); }
+}
+
+/* rerender around a page */
+function rerenderAround(n){
+  S.rendered.clear();
+  S.wraps.forEach(w => w.innerHTML = "");
+  queueRender(n);
+  queueRender(n+1);
+  extractPage(n);
+}
+
+/* BlobRangeTransport */
+class BlobRangeTransport extends pdfjsLib.PDFDataRangeTransport{
+  constructor(blob){ super(blob.size, false); this.blob = blob; }
+  requestDataRange(b,e){
+    this.blob.slice(b,e).arrayBuffer().then(buf => this.onDataRange(b,new Uint8Array(buf))).catch(err => console.error("range fail", err));
+  }
+}
+
+/* Local PDF load */
+$('#pdfFile').onchange = e=>{
+  const f = e.target.files[0];
+  if(!f) return;
+  S.textMode = false;
+  S.fileBlob = f;
+  S.fileName = f.name;
+  $('#fileName').textContent = f.name;
+  const tr = new BlobRangeTransport(f);
+  pdfjsLib.getDocument({range: tr}).promise
+    .then(pdf=>{
+      S.pdf = pdf;
+      S.num = pdf.numPages;
+      S.cur = 1;
+      $('#pgInput').value = "1";
+      $('#pageChip').textContent = `1/${S.num}`;
+      $('#pdfSpace').innerHTML = "";
+      S.wraps.clear();
+      S.rendered.clear();
+      for(let i=1;i<=S.num;i++){
+        const w=document.createElement('div'); w.className='pageWrap'; w.dataset.page=i;
+        $('#pdfSpace').appendChild(w); S.wraps.set(i,w);
+      }
+      queueRender(1); queueRender(2); extractPage(1); syncTouchBar();
+      toast("PDF loaded");
+    })
+    .catch(err=>{ console.error(err); toast("PDF load failed"); });
+  e.target.value = "";
+};
+
+/* Remote load */
+$('#loadUrl').onclick = async ()=>{
+  const url = $('#urlInput').value.trim();
+  if(!url) return toast("Paste a URL first");
+  try{
+    S.textMode = false;
+    const task = pdfjsLib.getDocument(url);
+    const pdf = await task.promise;
+    S.pdf = pdf;
+    S.num = pdf.numPages;
+    S.cur = 1;
+    S.fileName = url.split('/').pop() || "remote.pdf";
+    $('#fileName').textContent = S.fileName;
+    $('#pgInput').value = "1";
+    $('#pageChip').textContent = `1/${S.num}`;
+    $('#pdfSpace').innerHTML = "";
+    S.wraps.clear();
+    S.rendered.clear();
+    for(let i=1;i<=S.num;i++){
+      const w=document.createElement('div'); w.className='pageWrap'; w.dataset.page=i;
+      $('#pdfSpace').appendChild(w); S.wraps.set(i,w);
+    }
+    queueRender(1); queueRender(2); extractPage(1); syncTouchBar();
+    toast("Remote PDF loaded");
+  } catch(err){ console.error(err); toast("Remote load failed (CORS?)"); }
+};
+
+/* Zoom controls */
+function setZoom(z){
+  S.zoom = clamp(z, S.minZ, S.maxZ);
+  $('#zoomChip').textContent = Math.round(S.zoom*100) + "%";
+  rerenderAround(S.cur);
+}
+$('#zIn').onclick    = ()=> setZoom(S.zoom + 0.12);
+$('#zOut').onclick   = ()=> setZoom(S.zoom - 0.12);
+$('#zReset').onclick = ()=> setZoom(1);
+
+/* Page jump (top Go button) - this is considered a user/manual action that should refresh extracted */
+$('#pgGo').onclick = ()=>{
+  const n = clamp(parseInt($('#pgInput').value||"1"), 1, S.num||1);
+  programmaticJumpToPage(n, {updateExtracted:true});
+};
+
+/* pdf scroll sync and touchbar */
+const pdfScroll = $('#pdfScroll');
+const touchBar  = $('#touchBar');
+const thumb     = $('#thumb');
+
+function syncTouchBar(){
+  const el = pdfScroll;
+  const r = el.scrollTop / ((el.scrollHeight - el.clientHeight) || 1);
+  const h = Math.max(40, el.clientHeight * (el.clientHeight / (el.scrollHeight||1)));
+  const y = r * (el.clientHeight - h);
+  thumb.style.height = h + "px";
+  thumb.style.top    = y + "px";
+}
+
+pdfScroll.addEventListener('scroll', ()=>{
+  syncTouchBar();
+  // If user manually scrolled, allow extraction update
+  if(!S.suppressExtractOnPdfScroll){
+    // update S.cur by detecting closest visible page
+    if(S.wraps.size){
+      let closest = {n:null, dist:Infinity};
+      S.wraps.forEach((wrap,n)=>{
+        const r = wrap.getBoundingClientRect();
+        // because pdfSpace is inside pdfScroll, compute distance to pdfScroll center
+        const parentRect = pdfScroll.getBoundingClientRect();
+        const centerY = parentRect.top + parentRect.height/2;
+        const d = Math.abs((r.top + r.height/2) - centerY);
+        if(d < closest.dist) closest = {n,dist:d};
+      });
+      if(closest.n && closest.n !== S.cur){
+        S.cur = closest.n;
+        $('#pgInput').value = String(S.cur);
+        $('#pageChip').textContent = `${S.cur}/${S.num}`;
+        extractPage(S.cur); // update extracted because user manually scrolled
+      }
+    }
+  }
+});
+
+/* Touchbar drag */
+let draggingTB=false, startYTB=0, startTopTB=0;
+touchBar.addEventListener('pointerdown', e=>{
+  draggingTB = true;
+  startYTB = e.clientY;
+  startTopTB = parseFloat(thumb.style.top || "0");
+  touchBar.setPointerCapture(e.pointerId);
+});
+touchBar.addEventListener('pointermove', e=>{
+  if(!draggingTB) return;
+  const el = pdfScroll;
+  const h = thumb.getBoundingClientRect().height;
+  const max = el.clientHeight - h;
+  let top = clamp(startTopTB + (e.clientY - startYTB), 0, max);
+  thumb.style.top = top + "px";
+  const r = top / (max || 1);
+  el.scrollTop = r * (el.scrollHeight - el.clientHeight);
+});
+touchBar.addEventListener('pointerup', ()=> draggingTB=false);
+
+/* Extract page -> builds extracted items and assigns a sync id on each item */
+async function extractPage(n){
+  if(!S.pdf) return;
+  try{
+    const page = await S.pdf.getPage(n);
+    const tc   = await page.getTextContent();
+    const text = tc.items.map(i=>i.str).join(" ").replace(/\s+/g,' ').trim();
+    const lines = text
+      ? text.split(/(?<=[.!?])\s+(?=[A-Z(–\-\d])/g)
+      : [];
+    const ex = $('#exList'); ex.innerHTML = "";
+    if(lines.length === 0){
+      const it = document.createElement('div');
+      it.className='item';
+      it.textContent='No extractable sentences on this page.';
+      ex.append(it);
+      return;
+    }
+    lines.forEach((s,i)=>{
+      const item = document.createElement('div');
+      item.className='item';
+      const syncId = `p${n}.${i+1}`;
+      item.dataset.syncId = syncId;
+      const pageSpan = document.createElement('span');
+      pageSpan.className='clickable-page';
+      pageSpan.textContent = `p${n}.${i+1}`;
+      pageSpan.onclick = (ev)=>{ ev.stopPropagation(); ev.preventDefault(); programmaticJumpToPage(n, {updateExtracted:false}); };
+      const head = document.createElement('small');
+      head.innerHTML = `${escapeHtml(S.fileName)} — `;
+      head.appendChild(pageSpan);
+      const body = document.createElement('div'); body.style.marginTop='8px'; body.textContent = s;
+      
+      // Create button container
+      const tools = document.createElement('div');
+      tools.style.float='right'; tools.style.display='flex'; tools.style.gap='6px';
+      
+      // Check if this sentence is already selected
+      const isSelected = isSentenceSelected(n, i);
+      
+      if(isSelected) {
+        // If already selected, show remove highlight button
+        const removeBtn = document.createElement('button');
+        removeBtn.textContent = '❌';
+        removeBtn.className = 'remove-highlight';
+        removeBtn.title = 'Remove from selected sentences';
+        removeBtn.onclick = (ev) => { 
+          ev.stopPropagation(); 
+          removeSelectedSentence(n, i); 
+        };
+        tools.appendChild(removeBtn);
+      } else {
+        // If not selected, show add button
+        const add = document.createElement('button'); 
+        add.textContent='➕'; 
+        add.className='mini';
+        add.title = 'Add to selected sentences';
+        add.onclick = (ev)=>{ 
+          ev.stopPropagation(); 
+          addSelected(n, s, i); 
+        };
+        tools.appendChild(add);
+      }
+      
+      // Update highlighting based on selection status
+      if(isSelected) {
+        item.classList.add('highlighted');
+      } else {
+        item.classList.remove('highlighted');
+      }
+      
+      // clicking the item in extracted: should trigger sync to selected+exam but DO NOT scroll extracted itself
+      item.addEventListener('click', ev=>{
+        ev.stopPropagation();
+        // clicking extracted should not scroll extracted panel itself but should sync selected+exam
+        onPanelSentenceTap(item, 'extracted');
+      });
+      
+      item.append(head); item.append(body); item.append(tools);
+      ex.append(item);
+    });
+    // after rendering extracted items, rebuild sync registry
+    setTimeout(rebuildSyncRegistry, 40);
+  }catch(err){ console.error("extract fail", err); }
+}
+
+/* ------------------------------
+ PART C — Selected / Exam / Export-Import / PQUIZ
+------------------------------ */
+
+const sel = $('#selList');
+const exam = $('#exam');
+
+function insertInOrder(container, newRow){
+  const rows = Array.from(container.children);
+  const newP = parseInt(newRow.dataset.page || '0', 10);
+  const newI = parseInt(newRow.dataset.sentenceIndex || '0', 10);
+  let insertIdx = rows.length;
+  for(let i=0;i<rows.length;i++){
+    const r = rows[i];
+    const p = parseInt(r.dataset.page || '0', 10);
+    const s = parseInt(r.dataset.sentenceIndex || '0', 10);
+    if(newP < p || (newP === p && newI < s)){ insertIdx = i; break; }
+  }
+  if(insertIdx === rows.length) container.appendChild(newRow);
+  else container.insertBefore(newRow, rows[insertIdx]);
+}
+
+/* Add selected sentence from PDF */
+function addSelected(page, sentence, sentenceIndex){
+  // Check if sentence is already selected to prevent duplicates
+  if(isSentenceSelected(page, sentenceIndex)) {
+    toast('This sentence is already selected');
+    return;
+  }
+  
+  const row = document.createElement('div'); row.className='item';
+  const head = document.createElement('small');
+  const pageSpan = document.createElement('span');
+  pageSpan.className = 'sentence-hyperlink';
+  pageSpan.textContent = `p${page}.${sentenceIndex+1}`;
+  pageSpan.title = 'Click to jump to this sentence';
+  pageSpan.addEventListener('click', ev=>{
+    ev.stopPropagation(); ev.preventDefault();
+    programmaticJumpToPage(page, {updateExtracted: true});
+    // NEW: Flash the corresponding sentence in extracted panel
+    setTimeout(() => {
+      const syncId = `p${page}.${sentenceIndex+1}`;
+      const exEl = findElementBySyncId(syncId, $('#exBody'));
+      if(exEl) {
+        scrollPanelToEl($('#exBody'), exEl);
+        flashSync(exEl);
+      }
+    }, 500);
+  });
+  head.appendChild(pageSpan);
+  const body = document.createElement('div'); body.style.marginTop='8px';
+  const toks = splitTokens(sentence);
+  toks.forEach(tok=>{
+    if(/^\s+$/.test(tok)){ const sp=document.createElement('span'); sp.className='sep'; sp.textContent=tok; body.append(sp); return; }
+    if(/[A-Za-z0-9]/.test(tok[0])){
+      const w = document.createElement('span'); w.className='word'; w.textContent = tok;
+      // FIX: Stop event bubbling and preserve scroll position
+      w.addEventListener('click', (ev)=>{
+        ev.stopPropagation();
+        ev.preventDefault();
+        const oldScroll = $('#selBody').scrollTop;
+        w.classList.toggle('mark');
+        buildExam();
+        $('#selBody').scrollTop = oldScroll;
+        updateExtractedHighlights();
+      });
+      body.append(w); return;
+    }
+    body.append(document.createTextNode(tok));
+  });
+  const rm = document.createElement('button'); rm.className='rm'; rm.textContent='❌';
+  rm.onclick = ()=>{ 
+    row.remove(); 
+    buildExam(); 
+    updateExtractedHighlights();
+  };
+  row.appendChild(head); row.appendChild(body); row.appendChild(rm);
+  row.dataset.page = String(page);
+  row.dataset.sentenceIndex = String(sentenceIndex);
+  // assign syncId to selected row
+  row.dataset.syncId = `p${page}.${sentenceIndex+1}`;
+  insertInOrder(sel, row);
+  buildExam(); 
+  updateExtractedHighlights(); // Update highlighting after adding
+  setTimeout(rebuildSyncRegistry,40);
+}
+
+/* Add selected sentence from text */
+function addSelectedFromText(sentence, sentenceIndex){
+  // Check if sentence is already selected to prevent duplicates
+  if(isSentenceSelectedFromText(sentenceIndex)) {
+    toast('This sentence is already selected');
+    return;
+  }
+  
+  const row = document.createElement('div'); row.className='item';
+  const head = document.createElement('small');
+  const pageSpan = document.createElement('span');
+  pageSpan.className='sentence-hyperlink';
+  pageSpan.textContent = `s${sentenceIndex+1}`;
+  pageSpan.title = 'Sentence number';
+  head.appendChild(pageSpan);
+  const body = document.createElement('div'); body.style.marginTop='8px';
+  const toks = splitTokens(sentence);
+  toks.forEach(tok=>{
+    if(/^\s+$/.test(tok)){ const sp=document.createElement('span'); sp.className='sep'; sp.textContent=tok; body.append(sp); return; }
+    if(/[A-Za-z0-9]/.test(tok[0])){
+      const w = document.createElement('span'); w.className='word'; w.textContent=tok;
+      // FIX: Stop event bubbling and preserve scroll position
+      w.addEventListener('click', (ev)=>{
+        ev.stopPropagation();
+        ev.preventDefault();
+        const oldScroll = $('#selBody').scrollTop;
+        w.classList.toggle('mark');
+        buildExam();
+        $('#selBody').scrollTop = oldScroll;
+        updateExtractedHighlights();
+      });
+      body.append(w); return;
+    }
+    body.append(document.createTextNode(tok));
+  });
+  const rm = document.createElement('button'); rm.className='rm'; rm.textContent='❌';
+  rm.onclick = ()=>{ 
+    row.remove(); 
+    buildExam(); 
+    updateExtractedHighlights();
+  };
+  row.appendChild(head); row.appendChild(body); row.appendChild(rm);
+  row.dataset.textMode = 'true';
+  row.dataset.sentenceIndex = String(sentenceIndex);
+  row.dataset.syncId = `s${sentenceIndex+1}`;
+  insertInOrder(sel, row);
+  buildExam(); 
+  updateExtractedHighlights(); // Update highlighting after adding
+  setTimeout(rebuildSyncRegistry,40);
+}
+
+/* Remove selected sentence */
+function removeSelectedSentence(pageNum, sentenceIndex) {
+  const selItems = $$('#selList .item');
+  for (const item of selItems) {
+    const itemPage = parseInt(item.dataset.page || '0', 10);
+    const itemIndex = parseInt(item.dataset.sentenceIndex || '0', 10);
+    if (itemPage === pageNum && itemIndex === sentenceIndex) {
+      item.remove();
+      buildExam();
+      updateExtractedHighlights(); // Update highlighting after removal
+      toast('Sentence removed from selection');
+      return;
+    }
+  }
+}
+
+/* Check if a sentence is already selected */
+function isSentenceSelected(pageNum, sentenceIndex) {
+  const selItems = $$('#selList .item');
+  for (const item of selItems) {
+    const itemPage = parseInt(item.dataset.page || '0', 10);
+    const itemIndex = parseInt(item.dataset.sentenceIndex || '0', 10);
+    if (itemPage === pageNum && itemIndex === sentenceIndex) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/* Check if a text sentence is already selected */
+function isSentenceSelectedFromText(sentenceIndex) {
+  const selItems = $$('#selList .item');
+  for (const item of selItems) {
+    const itemIndex = parseInt(item.dataset.sentenceIndex || '0', 10);
+    if (item.dataset.textMode === 'true' && itemIndex === sentenceIndex) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/* Update extracted highlights (marks selected sentences) */
+function updateExtractedHighlights(){
+  const exItems = $$('#exList .item');
+  exItems.forEach(item=>{
+    const sid = item.dataset.syncId;
+    if(!sid) return;
+    const parts = sid.match(/p(\d+)\.(\d+)/);
+    if(parts){
+      const pageNum = parseInt(parts[1],10);
+      const sentIndex = parseInt(parts[2],10) - 1;
+      const isSelected = isSentenceSelected(pageNum, sentIndex);
+      
+      // Update highlighting
+      if(isSelected) {
+        item.classList.add('highlighted');
+      } else {
+        item.classList.remove('highlighted');
+      }
+      
+      // Update button (add/remove)
+      const tools = item.querySelector('div[style*="float: right"]');
+      if(tools) {
+        tools.innerHTML = '';
+        
+        if(isSelected) {
+          // Show remove button
+          const removeBtn = document.createElement('button');
+          removeBtn.textContent = '❌';
+          removeBtn.className = 'remove-highlight';
+          removeBtn.title = 'Remove from selected sentences';
+          removeBtn.onclick = (ev) => { 
+            ev.stopPropagation(); 
+            removeSelectedSentence(pageNum, sentIndex); 
+          };
+          tools.appendChild(removeBtn);
+        } else {
+          // Show add button
+          const add = document.createElement('button'); 
+          add.textContent='➕'; 
+          add.className='mini';
+          add.title = 'Add to selected sentences';
+          add.onclick = (ev)=>{ 
+            ev.stopPropagation(); 
+            addSelected(pageNum, item.querySelector('div:nth-child(2)').textContent, sentIndex); 
+          };
+          tools.appendChild(add);
+        }
+      }
+    }
+  });
+}
+
+/* Quiz mode wiring */
+const modeSel = $('#quizMode');
+modeSel.onchange = ()=> buildExam();
+$('#modeLetters').onclick = ()=>{ modeSel.value='first'; buildExam(); $('#drawer').style.display='none'; $('#drawerBack').style.display='none'; };
+$('#modeWords').onclick   = ()=>{ modeSel.value='words';  buildExam(); $('#drawer').style.display='none'; $('#drawerBack').style.display='none'; };
+
+/* Build exam from selected list (also add sync id to exam entries) */
+function buildExam(){
+  // FIX: Preserve scroll positions during rebuild
+  const oldSelScroll = $('#selBody').scrollTop;
+  const oldExamScroll = $('#examBody').scrollTop;
+  
+  exam.innerHTML = '';
+  const useWords = modeSel.value === 'words';
+  Array.from(sel.children).forEach(it=>{
+    const wrap = document.createElement('div'); wrap.className='item';
+    const head = document.createElement('small');
+    const label = it.querySelector('small')?.textContent || (it.dataset.textMode ? `s${parseInt(it.dataset.sentenceIndex||'0')+1}` : '');
+    
+    // NEW: Create sentence hyperlink for exam panel
+    const pageSpan = document.createElement('span');
+    pageSpan.className = 'sentence-hyperlink';
+    pageSpan.textContent = label;
+    pageSpan.title = 'Click to jump to this sentence';
+    
+    // NEW: Add click handler for exam panel sentence hyperlink
+    if(it.dataset.textMode !== 'true') {
+      const pageNum = parseInt(it.dataset.page || '0', 10);
+      const sentenceIndex = parseInt(it.dataset.sentenceIndex || '0', 10);
+      pageSpan.addEventListener('click', ev=>{
+        ev.stopPropagation(); ev.preventDefault();
+        programmaticJumpToPage(pageNum, {updateExtracted: true});
+        // NEW: Flash the corresponding sentence in extracted panel
+        setTimeout(() => {
+          const syncId = `p${pageNum}.${sentenceIndex+1}`;
+          const exEl = findElementBySyncId(syncId, $('#exBody'));
+          if(exEl) {
+            scrollPanelToEl($('#exBody'), exEl);
+            flashSync(exEl);
+          }
+        }, 500);
+      });
+    }
+    
+    head.appendChild(pageSpan);
+    wrap.appendChild(head);
+    
+    const p = document.createElement('p'); p.style.margin='0'; p.className = 'exam-sentence';
+    const blanks = [];
+    
+    // FIXED: Properly handle all tokens including punctuation
+    const toks = splitTokens(it.querySelector('div:nth-child(2)').textContent);
+    toks.forEach(tok=>{
+      if(/^\s+$/.test(tok)){ 
+        const sp=document.createElement('span'); sp.className='sep'; sp.textContent=tok; p.append(sp); return; 
+      }
+      if(/[A-Za-z0-9]/.test(tok[0])){
+        // Check if this word is marked in the original selected sentence
+        const originalWords = Array.from(it.querySelectorAll('.word'));
+        const isMarked = originalWords.some(w => w.textContent === tok && w.classList.contains('mark'));
+        
+        if(isMarked){
+          const b = document.createElement('span'); b.className='blank';
+          b.innerHTML = `<span class="ans">${tok}</span><span class="dots">___</span>`;
+          b.addEventListener('click', ()=> b.classList.toggle('reveal'));
+          p.appendChild(b);
+          blanks.push(b);
+        } else {
+          p.append(document.createTextNode(tok));
+        }
+        return;
+      }
+      // Handle punctuation and other non-word characters
+      p.append(document.createTextNode(tok));
+    });
+    
+    wrap.appendChild(p);
+    // attach sync id so clicking exam item can sync to others
+    const syncId = it.dataset.syncId || label;
+    wrap.dataset.syncId = syncId;
+    wrap.addEventListener('click', ev=>{
+      ev.stopPropagation();
+      onPanelSentenceTap(wrap, 'exam');
+    });
+    if(blanks.length){
+      wrap.dataset.targetIdx='0';
+      wrap.dataset.correctIdx='0';
+      if(useWords){
+        const pool = blanks.map(b=>b.querySelector('.ans').textContent);
+        const extra = [];
+        // Get non-marked words from the original sentence
+        const originalWords = Array.from(it.querySelectorAll('.word'));
+        originalWords.forEach(w=>{ 
+          if(!w.classList.contains('mark')) extra.push(w.textContent); 
+        });
+        while(pool.length < 4){
+          if(extra.length) pool.push(extra[Math.floor(Math.random()*extra.length)]);
+          else pool.push('opt');
+        }
+        for(let i=pool.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [pool[i],pool[j]]=[pool[j],pool[i]]; }
+        const choices = document.createElement('div'); choices.className='wordChoices';
+        pool.forEach(word=>{
+          const btn = document.createElement('button'); btn.className='wordBtn'; btn.textContent = word;
+          // FIX: Stop event bubbling and preserve scroll position
+          btn.addEventListener('click', (ev)=>{
+            ev.stopPropagation();
+            ev.preventDefault();
+            const oldScroll = $('#examBody').scrollTop;
+            const tgt = parseInt(wrap.dataset.targetIdx||'0',10);
+            const want = blanks[tgt].querySelector('.ans').textContent;
+            if(word === want){
+              blanks[tgt].classList.add('ok','reveal');
+              btn.classList.add('ok'); btn.disabled = true;
+              wrap.dataset.targetIdx = String(tgt + 1);
+            } else {
+              blanks[tgt].classList.add('badflash');
+              btn.classList.add('bad');
+              setTimeout(()=>{ blanks[tgt].classList.remove('badflash'); btn.classList.remove('bad'); },350);
+            }
+            $('#examBody').scrollTop = oldScroll;
+          });
+          choices.appendChild(btn);
+        });
+        wrap._choices = Array.from(choices.querySelectorAll('button'));
+        wrap._reset = ()=>{ blanks.forEach(b=>b.classList.remove('reveal','ok','badflash')); wrap._choices.forEach(b=>{ b.classList.remove('ok','bad'); b.disabled=false; }); wrap.dataset.targetIdx='0'; };
+        wrap.appendChild(choices);
+      } else {
+        const pool = blanks.map(b=>(b.querySelector('.ans').textContent[0]||'').toUpperCase());
+        const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        while(pool.length < 4) pool.push(letters[Math.floor(Math.random()*letters.length)]);
+        for(let i=pool.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [pool[i],pool[j]]=[pool[j],pool[i]]; }
+        const lettersDiv = document.createElement('div'); lettersDiv.className='letters';
+        pool.forEach(ch=>{
+          const btn = document.createElement('button'); btn.className='letterBtn'; btn.textContent = ch;
+          // FIX: Stop event bubbling and preserve scroll position
+          btn.addEventListener('click', (ev)=>{
+            ev.stopPropagation();
+            ev.preventDefault();
+            const oldScroll = $('#examBody').scrollTop;
+            const correctIndex = parseInt(wrap.dataset.correctIdx||'0',10);
+            const want = (blanks[correctIndex].querySelector('.ans').textContent[0]||'').toUpperCase();
+            if(ch === want){
+              blanks[correctIndex].classList.add('ok','reveal');
+              btn.classList.add('ok'); btn.disabled = true;
+              wrap.dataset.correctIdx = String(correctIndex + 1);
+            } else {
+              blanks[correctIndex].classList.add('badflash');
+              btn.classList.add('bad');
+              setTimeout(()=>{ blanks[correctIndex].classList.remove('badflash'); btn.classList.remove('bad'); },350);
+            }
+            $('#examBody').scrollTop = oldScroll;
+          });
+          lettersDiv.appendChild(btn);
+        });
+        wrap._letters = Array.from(lettersDiv.querySelectorAll('button'));
+        wrap._reset = ()=>{ blanks.forEach(b=>b.classList.remove('reveal','ok','badflash')); wrap._letters.forEach(b=>{ b.classList.remove('ok','bad'); b.disabled=false; }); wrap.dataset.correctIdx='0'; };
+        wrap.appendChild(lettersDiv);
+      }
+      const bar = document.createElement('div'); bar.style.marginTop='10px'; bar.style.display='flex'; bar.style.gap='8px'; bar.style.alignItems='center';
+      const tag = document.createElement('span'); tag.className='chip'; tag.textContent = label;
+      const cnt = document.createElement('span'); cnt.className='chip'; cnt.textContent = String(blanks.length);
+      const reveal = document.createElement('button'); reveal.className='mini'; reveal.textContent='Reveal all'; reveal.onclick = ()=> blanks.forEach(b=>b.classList.add('reveal','ok'));
+      const reset = document.createElement('button'); reset.className='mini'; reset.textContent='Reset'; reset.onclick = ()=> { blanks.forEach(b=>b.classList.remove('reveal','ok','badflash')); if(typeof wrap._reset === 'function') wrap._reset(); };
+      bar.append(tag,cnt,reveal,reset);
+      wrap.appendChild(bar);
+    }
+    exam.appendChild(wrap);
+  });
+  
+  // FIX: Restore scroll positions after rebuild
+  $('#selBody').scrollTop = oldSelScroll;
+  $('#examBody').scrollTop = oldExamScroll;
+  
+  // after building exam, rebuild registry
+  setTimeout(rebuildSyncRegistry,40);
+}
+
+/* Export selected */
+$('#exportSel').onclick = ()=>{
+  const data = Array.from(sel.children).map(it=>{
+    const words = Array.from(it.querySelectorAll('.word,.sep')).map(n=>({ t:n.textContent, m:n.classList.contains('word') && n.classList.contains('mark'), s:n.classList.contains('sep') }));
+    return {
+      file: S.fileName,
+      page: it.querySelector('small')?.textContent || '',
+      words,
+      pageNum: parseInt(it.dataset.page||'0',10),
+      sentenceIndex: parseInt(it.dataset.sentenceIndex||'0',10),
+      textMode: it.dataset.textMode === 'true'
+    };
+  });
+  const blob = new Blob([JSON.stringify({type:'selected',data},null,2)],{type:'application/json'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'selected.json'; a.click();
+};
+
+/* Import selected */
+$('#importSel').onchange = async e=>{
+  const f = e.target.files[0]; if(!f) return;
+  try{
+    const txt = await f.text();
+    const obj = JSON.parse(txt);
+    sel.innerHTML = '';
+    (obj.data || []).forEach(rec=>{
+      if(rec.textMode) addSelectedFromText(rec.words.map(w=>w.t).join(''), rec.sentenceIndex);
+      else addSelected(rec.pageNum, rec.words.map(w=>w.t).join(''), rec.sentenceIndex);
+    });
+    buildExam(); updateExtractedHighlights();
+    toast('Imported Selected');
+  }catch(err){ console.error(err); toast('Import failed'); }
+  e.target.value = '';
+};
+
+/* Export exam */
+$('#exportExam').onclick = ()=>{
+  const data = Array.from(sel.children).map(it=>{
+    const words = Array.from(it.querySelectorAll('.word,.sep')).map(n=>({ t:n.textContent, m:n.classList.contains('mark'), s:n.classList.contains('sep') }));
+    return {
+      file: S.fileName,
+      page: it.querySelector('small')?.textContent || '',
+      words,
+      pageNum: parseInt(it.dataset.page||'0',10),
+      sentenceIndex: parseInt(it.dataset.sentenceIndex||'0',10),
+      textMode: it.dataset.textMode === 'true'
+    };
+  });
+  const blob = new Blob([JSON.stringify({type:'exam',mode:modeSel.value,data},null,2)],{type:'application/json'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download='exam.json'; a.click();
+};
+
+/* Import exam */
+$('#importExam').onchange = async e=>{
+  const f = e.target.files[0]; if(!f) return;
+  try{
+    const txt = await f.text();
+    const obj = JSON.parse(txt);
+    sel.innerHTML = '';
+    if(obj.mode) modeSel.value = obj.mode;
+    (obj.data || []).forEach(rec=>{
+      if(rec.textMode) addSelectedFromText(rec.words.map(w=>w.t).join(''), rec.sentenceIndex);
+      else addSelected(rec.pageNum, rec.words.map(w=>w.t).join(''), rec.sentenceIndex);
+    });
+    buildExam(); updateExtractedHighlights();
+    toast('Imported Exam');
+  }catch(err){ console.error(err); toast('Import failed'); }
+  e.target.value = '';
+};
+
+/* Enhanced PQUIZ export that saves all changes first */
+$('#exportPquiz').onclick = async ()=>{
+  try{
+    // Save all current state before exporting
+    toast('Saving current state...');
+    
+    // Force update any pending changes
+    updateExtractedHighlights();
+    buildExam();
+    
+    // Small delay to ensure all DOM updates are complete
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
+    const zip = new JSZip();
+    if(S.fileBlob) zip.file('book.pdf', S.fileBlob);
+    else if(S.textMode) zip.file('text.txt', $('#textPasteArea').value || '');
+    
+    const selSnap = { 
+      type:'selected', 
+      mode: modeSel.value, 
+      data: Array.from(sel.children).map(it=>{
+        const words = Array.from(it.querySelectorAll('.word,.sep')).map(n=>({ 
+          t:n.textContent, 
+          m:n.classList.contains('word') && n.classList.contains('mark'), 
+          s:n.classList.contains('sep') 
+        }));
+        return {
+          file: S.fileName,
+          page: it.querySelector('small')?.textContent || '',
+          words,
+          pageNum: parseInt(it.dataset.page||'0',10),
+          sentenceIndex: parseInt(it.dataset.sentenceIndex||'0',10),
+          textMode: it.dataset.textMode === 'true'
+        };
+      })
+    };
+    
+    zip.file('selected.json', JSON.stringify(selSnap, null, 2));
+    const meta = { 
+      filename: S.fileName, 
+      mode: modeSel.value, 
+      createdAt: new Date().toISOString(),
+      hyperlinks: S.hyperlinks
+    };
+    zip.file('meta.json', JSON.stringify(meta, null, 2));
+    
+    const content = await zip.generateAsync({type:'blob', compression:'DEFLATE', compressionOptions:{level:6}});
+    const a = document.createElement('a'); 
+    a.href = URL.createObjectURL(content); 
+    a.download = (S.fileName || 'package') + '.pquiz'; 
+    a.click();
+    toast('PQUIZ exported with all current changes');
+  }catch(err){ 
+    console.error(err); 
+    toast('Export failed: ' + err.message); 
+  }
+};
+
+/* Import PQUIZ (patched) */
+$('#importPquiz').onchange = async e=>{
+  const f = e.target.files[0];
+  if(!f) return;
+  const name = (f.name || '').toLowerCase();
+  if(!(name.endsWith('.pquiz') || name.endsWith('.zip'))){
+    toast('Please select a .pquiz or .zip package'); return;
+  }
+  try{
+    showProgress(10, 'Reading package...');
+    const buf = await f.arrayBuffer();
+    const zip = await JSZip.loadAsync(buf);
+    const pdfEntry = Object.values(zip.files).find(z => z.name.toLowerCase().endsWith('.pdf'));
+    const textEntry = zip.file('text.txt') || Object.values(zip.files).find(z => z.name.toLowerCase().endsWith('.txt'));
+    const selEntry = zip.file('selected.json') || Object.values(zip.files).find(z => z.name.toLowerCase().endsWith('selected.json'));
+    const metaEntry = zip.file('meta.json') || zip.file('meta.JSON');
+    
+    if(pdfEntry){
+      const arr = await pdfEntry.async('uint8array');
+      const pdfBlob = new Blob([arr], { type: 'application/pdf' });
+      S.fileBlob = pdfBlob; S.textMode = false; S.fileName = pdfEntry.name || 'book.pdf';
+      $('#fileName').textContent = S.fileName;
+      const tr = new BlobRangeTransport(pdfBlob);
+      const pdf = await pdfjsLib.getDocument({ range: tr }).promise;
+      S.pdf = pdf; S.num = pdf.numPages; S.cur = 1;
+      $('#pgInput').value = '1'; $('#pageChip').textContent = `1/${S.num}`;
+      $('#pdfSpace').innerHTML = ''; S.wraps.clear(); S.rendered.clear();
+      for(let i=1;i<=S.num;i++){ const w = document.createElement('div'); w.className='pageWrap'; w.dataset.page = i; $('#pdfSpace').appendChild(w); S.wraps.set(i, w); }
+      queueRender(1); queueRender(2); extractPage(1); syncTouchBar();
+      toast('PDF loaded from package');
+    } else if(textEntry){
+      const txt = await textEntry.async('text');
+      S.textMode = true; S.fileName = 'Text Document'; $('#fileName').textContent = S.fileName;
+      $('#textPasteArea').value = txt;
+      const sentences = txt.split(/(?<=[.!?])\s+(?=[A-Z(–\-\d])/g).filter(s=>s.trim());
+      const ex = $('#exList'); ex.innerHTML = '';
+      sentences.forEach((s,i)=>{
+        const it = document.createElement('div'); it.className='item';
+        const head = document.createElement('small'); head.innerHTML = `${escapeHtml(S.fileName)} — <span class="clickable-page">s${i+1}</span>`;
+        const body = document.createElement('div'); body.style.marginTop='8px'; body.textContent = s;
+        
+        // Check if this sentence is already selected
+        const isSelected = isSentenceSelectedFromText(i);
+        
+        const tools = document.createElement('div'); tools.style.float='right'; tools.style.display='flex'; tools.style.gap='6px';
+        
+        if(isSelected) {
+          const removeBtn = document.createElement('button');
+          removeBtn.textContent = '❌';
+          removeBtn.className = 'remove-highlight';
+          removeBtn.title = 'Remove from selected sentences';
+          removeBtn.onclick = (ev) => { 
+            ev.stopPropagation(); 
+            removeSelectedSentence(0, i); // For text mode, page is 0
+          };
+          tools.appendChild(removeBtn);
+        } else {
+          const add = document.createElement('button'); add.className='mini'; add.textContent='➕'; add.onclick = ()=> addSelectedFromText(s,i);
+          tools.appendChild(add);
+        }
+        
+        it.append(head); it.append(body); it.append(tools);
+        
+        if(isSelected) {
+          it.classList.add('highlighted');
+        }
+        
+        ex.append(it);
+      });
+      toast('Text loaded from package');
+    } else {
+      toast('No PDF or text found inside package');
+    }
+    
+    if(selEntry){
+      try{
+        const txt = await selEntry.async('text');
+        const obj = JSON.parse(txt);
+        sel.innerHTML = '';
+        (obj.data || []).forEach(rec=>{
+          if(rec.textMode) addSelectedFromText(rec.words.map(w=>w.t).join(''), rec.sentenceIndex);
+          else addSelected(rec.pageNum, rec.words.map(w=>w.t).join(''), rec.sentenceIndex);
+        });
+        buildExam(); updateExtractedHighlights();
+        toast('Selected imported from package');
+      }catch(err){ console.error('selected import error', err); }
+    }
+    
+    // Import hyperlinks from meta if available
+    if(metaEntry){
+      try{
+        const metaTxt = await metaEntry.async('text');
+        const metaObj = JSON.parse(metaTxt);
+        if(metaObj.hyperlinks && Array.isArray(metaObj.hyperlinks)){
+          S.hyperlinks = metaObj.hyperlinks;
+          localStorage.setItem('pquiz_hyperlinks', JSON.stringify(S.hyperlinks));
+          renderHyperlinks();
+        }
+      }catch(err){ console.error('meta import error', err); }
+    }
+    
+    hideProgress();
+  }catch(err){
+    hideProgress(); console.error('import pquiz failed', err); toast('Failed to import package');
+  }
+  e.target.value = '';
+};
+
+</script>
+
+<script>
+/* ------------------------------
+   PART D — SYNC ENGINE & SCROLL FIXES (FIXED - AUTO PAGE CHANGE)
+------------------------------ */
+
+/* Registry for sync: id -> [elements...] */
+const SYNC = new Map();
+
+/* Helper: register element */
+function registerSyncEl(id, el){
+  if(!id || !el) return;
+  if(!SYNC.has(id)) SYNC.set(id, []);
+  const arr = SYNC.get(id);
+  if(arr.indexOf(el) === -1) arr.push(el);
+}
+
+/* Utility: scroll a panel (paneBody) to ensure an element is visible in that panel */
+function scrollPanelToEl(panelEl, targetEl){
+  if(!panelEl || !targetEl || S._suspendScroll) return;
+  const panelRect = panelEl.getBoundingClientRect();
+  const targetRect = targetEl.getBoundingClientRect();
+  const topVisible = targetRect.top >= panelRect.top && targetRect.bottom <= panelRect.bottom;
+  if(topVisible) return;
+  const currentScroll = panelEl.scrollTop;
+  const offset = (targetRect.top - panelRect.top) + currentScroll;
+  const desired = Math.max(0, offset - (panelEl.clientHeight/2) + (targetRect.height/2));
+  panelEl.scrollTo({ top: desired, behavior: 'smooth' });
+}
+
+/* Small flash */
+function flashSync(el){
+  if(!el) return;
+  el.classList.add('syncFlash');
+  setTimeout(()=> el.classList.remove('syncFlash'), 700);
+}
+
+/* FIXED: Extract sync ID from element - handles both data-sync-id and text content */
+function extractSyncId(el) {
+  // First try the data attribute
+  if (el.dataset.syncId) return el.dataset.syncId;
+  
+  // Fallback: extract from text content
+  const smallText = el.querySelector('small')?.textContent || '';
+  const match = smallText.match(/(p\d+\.\d+|s\d+)/);
+  return match ? match[1] : null;
+}
+
+/* FIXED: Extract page number from sync ID */
+function extractPageFromSyncId(syncId) {
+  const match = syncId.match(/p(\d+)\.\d+/);
+  return match ? parseInt(match[1], 10) : null;
+}
+
+/* FIXED: Find element by sync ID with multiple fallback methods */
+function findElementBySyncId(syncId, container) {
+  if (!syncId || !container) return null;
+  
+  // Method 1: Direct data attribute search
+  const byDataAttr = container.querySelector(`[data-sync-id="${syncId}"]`);
+  if (byDataAttr) return byDataAttr;
+  
+  // Method 2: Search in small text content
+  const allItems = container.querySelectorAll('.item');
+  for (let item of allItems) {
+    const small = item.querySelector('small');
+    if (small && small.textContent.includes(syncId)) {
+      return item;
+    }
+  }
+  
+  return null;
+}
+
+/* FIXED: onPanelSentenceTap - automatically changes PDF page when needed */
+function onPanelSentenceTap(el, fromPanel){
+  if(!el) return;
+  
+  const syncId = extractSyncId(el);
+  if(!syncId) {
+    console.log('No sync ID found for:', el);
+    return;
+  }
+
+  console.log('Tapping:', { fromPanel, syncId });
+
+  // Highlight clicked element
+  const parentList = el.closest('.list');
+  if(parentList){
+    Array.from(parentList.querySelectorAll('.item')).forEach(it => it.classList.remove('highlighted'));
+    el.classList.add('highlighted');
+  }
+
+  // FIXED: Extract page number and check if we need to change PDF page
+  const targetPage = extractPageFromSyncId(syncId);
+  let pageChanged = false;
+  
+  if (targetPage && targetPage !== S.cur) {
+    console.log(`Changing PDF page from ${S.cur} to ${targetPage} to show sentence`);
+    programmaticJumpToPage(targetPage, {updateExtracted: true});
+    pageChanged = true;
+  }
+
+  // FIXED: Find elements using working methods
+  const exBody = $('#exBody');
+  const selBody = $('#selBody'); 
+  const examBody = $('#examBody');
+  
+  const exEl = findElementBySyncId(syncId, exBody);
+  const selEl = findElementBySyncId(syncId, selBody);
+  const examEl = findElementBySyncId(syncId, examBody);
+
+  console.log('Found elements:', { exEl: !!exEl, selEl: !!selEl, examEl: !!examEl, pageChanged });
+
+  // FIXED: Working sync behavior with page change support
+  if(fromPanel === 'selected'){
+    // FIX: Don't scroll the same panel - just flash
+    flashSync(el);
+    
+    // If we changed pages, wait a bit for the extracted panel to update
+    if (pageChanged) {
+      setTimeout(() => {
+        const newExEl = findElementBySyncId(syncId, exBody);
+        if (newExEl) { 
+          scrollPanelToEl(exBody, newExEl); 
+          flashSync(newExEl);
+          console.log('Scrolling extracted to:', syncId, 'after page change');
+        }
+      }, 800);
+    } else if(exEl) { 
+      scrollPanelToEl(exBody, exEl); 
+      flashSync(exEl);
+    }
+
+    if(examEl) { 
+      scrollPanelToEl(examBody, examEl); 
+      flashSync(examEl);
+    }
+  } 
+  else if(fromPanel === 'extracted'){
+    // Don't scroll extracted panel itself; only scroll selected + exam
+    if(selEl) { scrollPanelToEl(selBody, selEl); flashSync(selEl); }
+    if(examEl){ scrollPanelToEl(examBody, examEl); flashSync(examEl); }
+    // ensure extracted item gets a visual flash but not scrolled
+    flashSync(el);
+  }
+  else if(fromPanel === 'exam'){
+    // FIX: Don't scroll the same panel - just flash
+    flashSync(el);
+    
+    // If we changed pages, wait a bit for the extracted panel to update
+    if (pageChanged) {
+      setTimeout(() => {
+        const newExEl = findElementBySyncId(syncId, exBody);
+        if (newExEl) { 
+          scrollPanelToEl(exBody, newExEl); 
+          flashSync(newExEl);
+          console.log('Scrolling extracted to:', syncId, 'after page change');
+        }
+      }, 800);
+    } else if(exEl) { 
+      scrollPanelToEl(exBody, exEl); 
+      flashSync(exEl);
+    }
+    
+    if(selEl) { scrollPanelToEl(selBody, selEl); flashSync(selEl); }
+  }
+}
+
+/* FIXED: Rebuild sync registry - ensure all elements get proper sync IDs */
+function rebuildSyncRegistry(){
+  SYNC.clear();
+  
+  // Process extracted items
+  $$('#exList .item').forEach(item => {
+    const syncId = extractSyncId(item);
+    if (syncId) {
+      registerSyncEl(syncId, item);
+      // Remove any existing handlers and add fresh one
+      item.onclick = (ev) => { 
+        ev.stopPropagation(); 
+        ev.preventDefault(); 
+        onPanelSentenceTap(item, 'extracted'); 
+      };
+    }
+  });
+  
+  // Process selected items  
+  $$('#selList .item').forEach(item => {
+    const syncId = extractSyncId(item);
+    if (syncId) {
+      registerSyncEl(syncId, item);
+      item.onclick = (ev) => { 
+        ev.stopPropagation(); 
+        ev.preventDefault(); 
+        onPanelSentenceTap(item, 'selected'); 
+      };
+    }
+  });
+  
+  // Process exam items
+  $$('#exam .item').forEach(item => {
+    const syncId = extractSyncId(item);
+    if (syncId) {
+      registerSyncEl(syncId, item);
+      item.onclick = (ev) => { 
+        ev.stopPropagation(); 
+        ev.preventDefault(); 
+        onPanelSentenceTap(item, 'exam'); 
+      };
+    }
+  });
+
+  console.log('Sync registry rebuilt with', SYNC.size, 'entries');
+}
+
+// Ensure sync registry gets rebuilt after all operations
+const originalAddSelected = addSelected;
+addSelected = function(page, sentence, sentenceIndex) {
+  originalAddSelected(page, sentence, sentenceIndex);
+  setTimeout(rebuildSyncRegistry, 100);
+};
+
+const originalBuildExam = buildExam;
+buildExam = function() {
+  originalBuildExam();
+  setTimeout(rebuildSyncRegistry, 100);
+};
+
+const originalExtractPage = extractPage;
+extractPage = async function(n) {
+  await originalExtractPage(n);
+  setTimeout(rebuildSyncRegistry, 100);
+};
+
+// Initial setup
+setTimeout(rebuildSyncRegistry, 500);
+
+// Expose for debugging
+window.debugSync = { SYNC, rebuildSyncRegistry, findElementBySyncId, extractSyncId, extractPageFromSyncId };
+
+/* Programmatic jump to PDF page with options */
+function programmaticJumpToPage(pageNum, options = { updateExtracted: true }){
+  if(!pageNum || !S.num) return;
+  pageNum = clamp(parseInt(pageNum,10), 1, S.num);
+  S.cur = pageNum;
+  $('#pgInput').value = String(pageNum);
+  $('#pageChip').textContent = `${pageNum}/${S.num}`;
+  const wrap = S.wraps.get(pageNum);
+  if(wrap){
+    const parent = pdfScroll;
+    const targetRect = wrap.getBoundingClientRect();
+    const parentRect = parent.getBoundingClientRect();
+    const currentScroll = parent.scrollTop;
+    const offsetTopWithinParent = wrap.offsetTop;
+    const desired = Math.max(0, offsetTopWithinParent - Math.round(parent.clientHeight/2) + Math.round(wrap.clientHeight/2));
+    S.suppressExtractOnPdfScroll = true;
+    clearTimeout(S._suppTimer);
+    S._suppTimer = setTimeout(()=>{ S.suppressExtractOnPdfScroll = false; }, 700);
+    parent.scrollTo({ top: desired, behavior: 'smooth' });
+  }
+  queueRender(pageNum);
+  queueRender(pageNum + 1);
+  if(options.updateExtracted){
+    setTimeout(()=> extractPage(pageNum), 420);
+  }
+}
+
+/* Enhanced Hyperlinks / Quick Links handling with delete buttons */
+function renderHyperlinks(){
+  const container = $('#hyperlinksContainer');
+  container.innerHTML = '';
+  S.hyperlinks.sort((a,b)=> (a.page - b.page));
+  
+  if(S.hyperlinks.length === 0){
+    container.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:8px">No quick links saved yet. Add pages using the form above.</div>';
+    return;
+  }
+  
+  S.hyperlinks.forEach((h, index)=>{
+    const btn = document.createElement('button'); 
+    btn.className='btn';
+    btn.style.display='inline-flex';
+    btn.style.alignItems='center';
+    btn.style.margin='6px 6px 6px 0';
+    
+    const linkText = document.createElement('span');
+    linkText.textContent = `p${h.page}` + (h.name ? ` — ${h.name}` : '');
+    
+    const deleteBtn = document.createElement('button');
+    deleteBtn.className = 'quicklink-delete';
+    deleteBtn.textContent = '×';
+    deleteBtn.title = 'Delete this link';
+    deleteBtn.onclick = (ev)=>{
+      ev.stopPropagation();
+      S.hyperlinks.splice(index, 1);
+      localStorage.setItem('pquiz_hyperlinks', JSON.stringify(S.hyperlinks));
+      renderHyperlinks();
+      toast('Link deleted');
+    };
+    
+    btn.appendChild(linkText);
+    btn.appendChild(deleteBtn);
+    
+    btn.onclick = (ev)=>{
+      if(ev.target === deleteBtn) return; // Don't navigate if delete button was clicked
+      ev.stopPropagation(); ev.preventDefault();
+      programmaticJumpToPage(h.page, { updateExtracted: true });
+    };
+    
+    container.appendChild(btn);
+  });
+}
+
+$('#addHyperlink').onclick = ()=>{
+  const p = parseInt($('#hyperlinkPage').value||'0',10);
+  if(!p || p < 1) return toast('Enter valid page');
+  const name = $('#hyperlinkName').value.trim();
+  
+  // Check for duplicates
+  if(S.hyperlinks.some(link => link.page === p)){
+    toast(`Page ${p} already has a link`);
+    return;
+  }
+  
+  S.hyperlinks.push({ page: p, name });
+  localStorage.setItem('pquiz_hyperlinks', JSON.stringify(S.hyperlinks));
+  renderHyperlinks();
+  
+  // Clear inputs
+  $('#hyperlinkPage').value='';
+  $('#hyperlinkName').value='';
+  
+  toast(`Added link to page ${p}`);
+};
+
+$('#clearLinks').onclick = ()=>{
+  if(S.hyperlinks.length === 0) return toast('No links to clear');
+  if(confirm('Clear all quick links?')){
+    S.hyperlinks = []; 
+    localStorage.setItem('pquiz_hyperlinks', JSON.stringify(S.hyperlinks));
+    renderHyperlinks();
+    toast('All links cleared');
+  }
+};
+
+/* Kick initial render of hyperlinks from storage */
+renderHyperlinks();
+
+/* initial small rebuild */
+setTimeout(rebuildSyncRegistry, 350);
+
+/* Expose some utilities to window for debugging (optional) */
+window._pquiz = { S, SYNC, rebuildSyncRegistry, programmaticJumpToPage };
+
+</script>
+
+</body>
+</html>
